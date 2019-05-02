@@ -13,22 +13,183 @@ enum BlockState {
 
 public class Evaluater {
 
-	public double evaluate(TetrisBoard basetetris, Tetrimino mino) {
+	public double[][] unit;
+	public double[][][] w;
+	public static final double wMax = 1.0;
+	double[][] delta;
+	int outLayer;
+	double err;
+
+	private int score = -1;
+	private TetrisBoard gameresult;
+
+	public static final double MUTATE = 0.01;
+	public static final int[] unitN = { 14, 14, 3, 1 };
+	public static final int layerN = unitN.length;
+
+	// initialize
+	public Evaluater() {
+		outLayer = layerN - 1;
+		unit = new double[layerN][];
+		delta = new double[layerN][];
+		w = new double[layerN][][];
+		for (int l = 0; l < layerN; l++) {
+			int u = unitN[l];
+			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
+			if (l < outLayer)
+				unit[l][u] = 1.0;
+			if (l > 0) {
+				int v = unitN[l - 1] + 1;
+				delta[l] = new double[u];
+				w[l] = new double[u][v];
+			}
+		}
+		for (int l = 1; l < layerN; l++) {
+			for (int j = 0; j < unitN[l]; j++) {
+				for (int i = 0; i < unitN[l - 1] + 1; i++) {
+					w[l][j][i] = (Math.random() * 2 - 1) * wMax;
+				}
+			}
+		}
+	}
+
+	// load
+	public Evaluater(File file) throws IOException {
+		if (file.exists() && file.isFile() && file.canWrite()) {
+			System.out.println(file.getAbsolutePath());
+			BufferedReader br = new BufferedReader(new FileReader(file));
+			outLayer = layerN - 1;
+			unit = new double[layerN][];
+			delta = new double[layerN][];
+			w = new double[layerN][][];
+			for (int l = 0; l < layerN; l++) {
+				int u = unitN[l];
+				unit[l] = new double[u + (l == outLayer ? 0 : 1)];
+				if (l < outLayer)
+					unit[l][u] = 1.0;
+				if (l > 0) {
+					int v = unitN[l - 1] + 1;
+					delta[l] = new double[u];
+					w[l] = new double[u][v];
+				}
+			}
+			for (int l = 1; l < layerN; l++) {
+				for (int j = 0; j < unitN[l]; j++) {
+					for (int i = 0; i < unitN[l - 1] + 1; i++) {
+						String in = br.readLine();
+						try {
+							w[l][j][i] = Double.parseDouble(in);
+						} catch (NumberFormatException e) {
+							System.err.println("parse err " + in);
+							w[l][j][i] = (Math.random() * 2 - 1) * wMax;
+						}
+					}
+				}
+			}
+			br.close();
+		} else {
+			System.out.println("ファイルを読み込めません");
+		}
+	}
+
+	// clone
+	public Evaluater(Evaluater target) {
+		outLayer = layerN - 1;
+		unit = new double[layerN][];
+		delta = new double[layerN][];
+		w = new double[layerN][][];
+		for (int l = 0; l < layerN; l++) {
+			int u = unitN[l];
+			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
+			if (l < outLayer)
+				unit[l][u] = 1.0;
+			if (l > 0) {
+				int v = unitN[l - 1] + 1;
+				delta[l] = new double[u];
+				w[l] = new double[u][v];
+			}
+		}
+		for (int l = 1; l < layerN; l++) {
+			for (int j = 0; j < unitN[l]; j++) {
+				for (int i = 0; i < unitN[l - 1] + 1; i++) {
+					w[l][j][i] = target.w[l][j][i];
+				}
+			}
+		}
+	}
+
+	// child
+	public Evaluater(Evaluater first, Evaluater second) {
+		outLayer = layerN - 1;
+		unit = new double[layerN][];
+		delta = new double[layerN][];
+		w = new double[layerN][][];
+		for (int l = 0; l < layerN; l++) {
+			int u = unitN[l];
+			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
+			if (l < outLayer)
+				unit[l][u] = 1.0;
+			if (l > 0) {
+				int v = unitN[l - 1] + 1;
+				delta[l] = new double[u];
+				w[l] = new double[u][v];
+			}
+		}
+		for (int l = 1; l < layerN; l++) {
+			for (int j = 0; j < unitN[l]; j++) {
+				for (int i = 0; i < unitN[l - 1] + 1; i++) {
+					double tw;
+					if (Math.random() < 0.5)
+						tw = first.w[l][j][i];
+					else
+						tw = second.w[l][j][i];
+
+					if (Math.random() < MUTATE) {
+						tw = (Math.random() * 2 - 1) * wMax;
+					}
+
+					if (Math.random() < MUTATE) {
+						tw = (first.w[l][j][i] + second.w[l][j][i]) * 0.5;
+					}
+
+					if (Math.random() < MUTATE) {
+						if (Math.random() < 0.5)
+							tw = sigmoid(first.w[l][j][i]) * 2 - 1;
+						else
+							tw = sigmoid(second.w[l][j][i]) * 2 - 1;
+					}
+
+					if (Math.random() < MUTATE) {
+						tw /= 2;
+					}
+
+					w[l][j][i] = tw;
+				}
+			}
+		}
+	}
+
+	public double evaluate(TetrisBoard basetetris, Tetrimino basemino) {
 		TetrisBoard tetris;
+		Tetrimino mino;
 		try {
 			tetris = basetetris.clone();
+			mino = basemino.clone();
 		} catch (CloneNotSupportedException e) {
 			e.printStackTrace();
 			return 0;
 		}
-		tetris.setMino(mino);
-		mino.tick(tetris, Control.HardDrop);
-		int prescore = tetris.score;
 
-		tetris.tick(Control.Wait);
+		int prescore = tetris.score;
+		mino.setOnGround();
+		tetris.setMino(mino);
+		tetris.ground();
+		if (tetris.isGameover())
+			return 0;
 
 		Mino[][] board = tetris.board;
 		int upscore = tetris.score - prescore;
+		int score = tetris.score;
 		@SuppressWarnings("unused")
 		int block = 0;
 		int hole = 0;
@@ -88,7 +249,7 @@ public class Evaluater {
 		}
 
 		double highvar = 0;
-		int highave = 0;
+		double highave = 0;
 		for (int x = 0; x < TetrisBoard.WIDTH; x++) {
 			for (int y = highest; y >= 0; y--) {
 				if (evboard[y][x] != BlockState.SKY) {
@@ -102,23 +263,49 @@ public class Evaluater {
 		highave /= TetrisBoard.WIDTH;
 		highvar = Math.sqrt(highvar - (highave * highave));
 
+		double insidehole = 0;
+		for (int y = 0; y < Math.max(5, highave - highvar); y++) {
+			int cnt = 0;
+			for (int x = 0; x < TetrisBoard.WIDTH; x++) {
+				if (evboard[y][x] == BlockState.SKY) {
+					cnt++;
+				}
+			}
+			insidehole += cnt * cnt;
+		}
+
+		int stronghole = 0;
+		for (int y = 0; y < TetrisBoard.VISIBLE_HEIGHT; y++) {
+			for (int x = 0; x < TetrisBoard.WIDTH; x++) {
+				if (evboard[y][x] == BlockState.HOLE && evboard[y + 1][x] == BlockState.HOLE) {
+					stronghole++;
+				}
+			}
+		}
+
 		double ret = 0;
 		int i = 0;
-		double[] data = new double[9];
+		double[] data = new double[unitN[0]];
 		data[i++] = upscore;
+		data[i++] = score;
 		// data[i++] = block;
 		data[i++] = hole;
 		data[i++] = lid;
 		data[i++] = indoor;
 		data[i++] = highest;
+		data[i++] = highave;
 		data[i++] = highvar;
 		data[i++] = mino.posY;
 		// data[i++] = tetris.getPileSum();
 		data[i++] = tetris.REN + 1;
 		data[i++] = tetris.BackToBack + 1;
-		// System.out.println(Arrays.toString(data));
+		data[i++] = insidehole;
+		data[i++] = tetris.ClonedPileSum;
+		data[i++] = stronghole;
 		forward(data);
 		ret = getResult();
+
+		// System.out.println(ret + " " + Arrays.toString(data));
 		return ret;
 	}
 
@@ -128,139 +315,6 @@ public class Evaluater {
 			fillfield(board, hole, x - 1, y);
 			fillfield(board, hole, x + 1, y);
 			fillfield(board, hole, x, y - 1);
-		}
-	}
-
-	public static final int layerN = 3;
-	public static final int[] unitN = { 9, 9, 1 };
-	public double[][] unit;
-	public double[][][] w;
-	public static final double wMax = 1.0;
-	double[][] delta;
-	int outLayer;
-	double err;
-
-	public static final double MUTATE = 0.01;
-	private int score = -1;
-
-	// initialize
-	public Evaluater() {
-		outLayer = layerN - 1;
-		unit = new double[layerN][];
-		delta = new double[layerN][];
-		w = new double[layerN][][];
-		for (int l = 0; l < layerN; l++) {
-			int u = unitN[l];
-			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
-			if (l < outLayer)
-				unit[l][u] = 1.0;
-			if (l > 0) {
-				int v = unitN[l - 1] + 1;
-				delta[l] = new double[u];
-				w[l] = new double[u][v];
-			}
-		}
-		for (int l = 1; l < layerN; l++) {
-			for (int j = 0; j < unitN[l]; j++) {
-				for (int i = 0; i < unitN[l - 1] + 1; i++) {
-					w[l][j][i] = (Math.random() * 2 - 1) * wMax;
-				}
-			}
-		}
-	}
-
-	// load
-	public Evaluater(File file) throws NumberFormatException, IOException {
-		if (file.exists() && file.isFile() && file.canWrite()) {
-			System.out.println(file.getAbsolutePath());
-			BufferedReader br = new BufferedReader(new FileReader(file));
-			outLayer = layerN - 1;
-			unit = new double[layerN][];
-			delta = new double[layerN][];
-			w = new double[layerN][][];
-			for (int l = 0; l < layerN; l++) {
-				int u = unitN[l];
-				unit[l] = new double[u + (l == outLayer ? 0 : 1)];
-				if (l < outLayer)
-					unit[l][u] = 1.0;
-				if (l > 0) {
-					int v = unitN[l - 1] + 1;
-					delta[l] = new double[u];
-					w[l] = new double[u][v];
-				}
-			}
-			for (int l = 1; l < layerN; l++) {
-				for (int j = 0; j < unitN[l]; j++) {
-					for (int i = 0; i < unitN[l - 1] + 1; i++) {
-						w[l][j][i] = Double.longBitsToDouble(Long.parseLong(br.readLine()));
-					}
-				}
-			}
-			br.close();
-		} else {
-			System.out.println("ファイルを読み込めません");
-		}
-	}
-
-	// clone
-	public Evaluater(Evaluater target) {
-		outLayer = layerN - 1;
-		unit = new double[layerN][];
-		delta = new double[layerN][];
-		w = new double[layerN][][];
-		for (int l = 0; l < layerN; l++) {
-			int u = unitN[l];
-			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
-			if (l < outLayer)
-				unit[l][u] = 1.0;
-			if (l > 0) {
-				int v = unitN[l - 1] + 1;
-				delta[l] = new double[u];
-				w[l] = new double[u][v];
-			}
-		}
-		for (int l = 1; l < layerN; l++) {
-			for (int j = 0; j < unitN[l]; j++) {
-				for (int i = 0; i < unitN[l - 1] + 1; i++) {
-					w[l][j][i] = target.w[l][j][i];
-				}
-			}
-		}
-	}
-
-	// child
-	public Evaluater(Evaluater first, Evaluater second) {
-		outLayer = layerN - 1;
-		unit = new double[layerN][];
-		delta = new double[layerN][];
-		w = new double[layerN][][];
-		for (int l = 0; l < layerN; l++) {
-			int u = unitN[l];
-			unit[l] = new double[u + (l == outLayer ? 0 : 1)];
-			if (l < outLayer)
-				unit[l][u] = 1.0;
-			if (l > 0) {
-				int v = unitN[l - 1] + 1;
-				delta[l] = new double[u];
-				w[l] = new double[u][v];
-			}
-		}
-		for (int l = 1; l < layerN; l++) {
-			for (int j = 0; j < unitN[l]; j++) {
-				for (int i = 0; i < unitN[l - 1] + 1; i++) {
-					double tw = (first.w[l][j][i] + second.w[l][j][i]) / 2;
-
-					if (Math.random() < 0.5)
-						tw = first.w[l][j][i];
-					else
-						tw = second.w[l][j][i];
-
-					if (Math.random() < MUTATE)
-						tw = (Math.random() * 2 - 1) * wMax;
-
-					w[l][j][i] = tw;
-				}
-			}
 		}
 	}
 
@@ -292,16 +346,16 @@ public class Evaluater {
 				for (int i = 0; i < unitN[l] + 1; i++) {
 					s += w[l + 1][j][i] * unit[l][i];
 				}
-				unit[l + 1][j] = sigmoid(s);
+				unit[l + 1][j] = s;// sigmoid(s);
 			}
 		}
 		for (int j = 0; j < unitN[outLayer]; j++) {
-			unit[outLayer][j] = 0.0;
+			unit[outLayer][j] = 10000.0;// 0.0
 			for (int i = 0; i < unitN[outLayer - 1] + 1; i++) {
 				unit[outLayer][j] += w[outLayer][j][i] * unit[outLayer - 1][i];
 			}
 		}
-		softmax(unit[outLayer]);
+		// softmax(unit[outLayer]);
 	}
 
 	void backPropagate(double[] d, double[] t) {
@@ -354,8 +408,9 @@ public class Evaluater {
 		return max;
 	}
 
-	public void setScore(int score) {
-		this.score = score;
+	public void setScore(TetrisBoard tetris) {
+		this.score = tetris.score;
+		this.gameresult = tetris;
 	}
 
 	public int getScore() {
@@ -366,7 +421,7 @@ public class Evaluater {
 
 	@Override
 	public String toString() {
-		return String.valueOf(getScore());
+		return String.valueOf(getScore()) + "  " + gameresult;
 	}
 
 	public void writeGene() throws IOException {
@@ -380,7 +435,7 @@ public class Evaluater {
 			for (int l = 1; l < layerN; l++) {
 				for (int j = 0; j < unitN[l]; j++) {
 					for (int i = 0; i < unitN[l - 1] + 1; i++) {
-						bf.write(Long.toString(Double.doubleToLongBits(w[l][j][i])));
+						bf.write(Double.toString(w[l][j][i]));
 						bf.newLine();
 					}
 				}
@@ -394,10 +449,12 @@ public class Evaluater {
 
 class SimpleEvaluater extends Evaluater {
 	@Override
-	public double evaluate(TetrisBoard basetetris, Tetrimino mino) {
+	public double evaluate(TetrisBoard basetetris, Tetrimino basemino) {
 		TetrisBoard tetris;
+		Tetrimino mino;
 		try {
 			tetris = basetetris.clone();
+			mino = basemino.clone();
 		} catch (CloneNotSupportedException e) {
 			e.printStackTrace();
 			return 0;
@@ -406,7 +463,7 @@ class SimpleEvaluater extends Evaluater {
 		mino.tick(tetris, Control.HardDrop);
 
 		int prescore = tetris.score;
-		tetris.tick(Control.Wait);
+		tetris.tick();
 		int upscore = tetris.score - prescore;
 
 		Mino[][] board = tetris.board;

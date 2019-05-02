@@ -3,14 +3,14 @@ package com.mygdx.game;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 
 public class Tetrimino implements Cloneable {
-	public static final int startX = 3;
-	public static final int startY = 20;
+	public static final int startX = TetrisBoard.WIDTH/2-2;
+	public static final int startY = TetrisBoard.HEIGHT-1;
 
 	public int posX, posY;
 	public int state;
 	public Mino type;
 
-	public boolean onGround = false;
+	private boolean onGround = false;
 	public boolean isTspin = false;
 	public boolean isTspinMini = false;
 
@@ -20,63 +20,78 @@ public class Tetrimino implements Cloneable {
 	@SuppressWarnings("unused")
 	private final int birthTick;
 
-	// TetrisBoard tetris;
-	// int tick;
 
 	private int lastdrop;
 	private int lasttouch;
 	private int postponement = 0;
 	private int stickwait = 0;
 
-	public boolean isAvailable(TetrisBoard tetris) {
-		return tetris.isPlayable();
-	}
-
+	/**
+	 * 詳細設定されたミノ
+	 * @param tetris
+	 * @param mino
+	 * @param posX
+	 * @param posY
+	 * @param state
+	 */
 	public Tetrimino(TetrisBoard tetris, Mino mino, int posX, int posY, int state) {
 		this.posX = posX;
 		this.posY = posY;
 		this.type = mino;
 		this.state = state;
 
-		// this.tetris = tetris;
-		// this.tick = tetris.getGametick();
 		birthTick = tetris.getGametick();
+		if (isCollide(tetris.board, state, posX, posY)) {
+			setOnGround();
+		}
 	}
 
+	/**
+	 * 通常の新規ミノ
+	 * @param tetris
+	 * @param mino
+	 */
 	public Tetrimino(TetrisBoard tetris, Mino mino) {
 		this.posX = startX;
 		this.posY = startY;
+		if (type == Mino.I) posY++;
 		this.type = mino;
 		this.state = 0;
 
-		// this.tetris = tetris;
-		// this.tick = tetris.getGametick();
 		birthTick = tetris.getGametick();
+		if (isCollide(tetris.board, state, posX, posY)) {
+			setOnGround();
+		}
 
-		if (type == Mino.I)
-			posY++;
 	}
 
+	/**
+	 * 指定されたコントロールを行う
+	 * changed = falseの後コントロール
+	 * コントロール後にドロップするならドロップ
+	 * @param tetris
+	 * @param control
+	 */
 	public void tick(TetrisBoard tetris, Control control) {
-		if (onGround || !isAvailable(tetris))
-			return;
-
-		if (isCollide(tetris.board, state, posX, posY)) {
-			onGround = true;
-		}
+		assert !isOnGround() : this;
 
 		changed = false;
 
-		// this.tetris = tetris;
-		// this.tick = tetris.getGametick();
-
 		control(tetris, control);
 
-		if (tetris.getGametick() - lastdrop > tetris.DROPTICK) {
+		if (tetris.getGametick() - lastdrop >= tetris.DROPTICK) {
 			drop(tetris);
 		}
 	}
 
+	/**
+	 * 指定環境で衝突するか
+	 * @param board　ボード
+	 * @param state　状態
+	 * @param posX　ｘ
+	 * @param posY　ｙ
+	 * @return　boolean
+	 */
 	public boolean isCollide(Mino[][] board, int state, int posX, int posY) {
 		for (int y = 0; y < type.shape[state].length; y++) {
 			for (int x = 0; x < type.shape[state][y].length; x++) {
@@ -91,6 +106,14 @@ public class Tetrimino implements Cloneable {
 		return false;
 	}
 
+	/**
+	 * 指定環境で停止可能か
+	 * @param board
+	 * @param state
+	 * @param posX
+	 * @param posY
+	 * @return
+	 */
 	public boolean isStopable(Mino[][] board, int state, int posX, int posY) {
 		if (!isCollide(board, state, posX, posY) && isCollide(board, state, posX, posY - 1))
 			return true;
@@ -98,12 +121,23 @@ public class Tetrimino implements Cloneable {
 			return false;
 	}
 
+	/**
+	 * ボード参照用
+	 * @param x
+	 * @param y
+	 * @return
+	 */
 	private boolean isInner(int x, int y) {
 		return TetrisBoard.isInner(x, y);
 	}
 
+	/**
+	 * onGroundなら表示しない
+	 * @param tetris
+	 * @param batch
+	 */
 	public void draw(TetrisBoard tetris, SpriteBatch batch) {
-		if (onGround || !isAvailable(tetris))
+		if (isOnGround())
 			return;
 
 		int ghostY = posY;
@@ -120,9 +154,14 @@ public class Tetrimino implements Cloneable {
 		}
 	}
 
-	private final int[][] SRS = new int[][] { { 0, 0 }, { 0, -1 }, { 1, 0 }, { 1, -1 }, { 0, 1 }, { 0, -2 }, { 1, -2 },
+	private final int[][] SRS = new int[][] { { 0, 0 }, { 0, -1 }, { 1, 0 }, { 1, -1 },  { 0, -2 }, { 1, -2 },{ 0, 1 },
 			{ 0, 2 } };
 
+	/**
+	 * 回転を試し、できたらchangedかつspined
+	 * @param tetris
+	 * @param rightRotate
+	 */
 	private void rotate(TetrisBoard tetris, boolean rightRotate) {
 		int nextstate = state;
 		boolean isOk = false;
@@ -169,6 +208,11 @@ public class Tetrimino implements Cloneable {
 		}
 	}
 
+	/**
+	 * スライドを試す、できるならmoveへ
+	 * @param tetris
+	 * @param rightSlide
+	 */
 	private void slide(TetrisBoard tetris, boolean rightSlide) {
 		if (rightSlide) {
 			if (!isCollide(tetris.board, state, posX + 1, posY)) {
@@ -183,22 +227,33 @@ public class Tetrimino implements Cloneable {
 		}
 	}
 
+	/**
+	 * ハードドロップ、moveの後stickへ
+	 * @param tetris
+	 */
 	private void hardDrop(TetrisBoard tetris) {
 		int ground = posY;
 		while (!isStopable(tetris.board, state, posX, ground))
 			ground--;
 		move(0, ground - posY);
-		stick(tetris);
+		setOnGround();
+		spinCheck(tetris);
 	}
 
+	/**
+	 * 落ちる、下がれない場合条件を満たせば固定
+	 * @param tetris
+	 */
 	private void drop(TetrisBoard tetris) {
 		if (isStopable(tetris.board, state, posX, posY)) {
 			if (stickwait == 0) {
 				lasttouch = tetris.getGametick();
 			} else if (tetris.getGametick() - lasttouch > tetris.STICKTICK + postponement) {
-				stick(tetris);
+				spinCheck(tetris);
+				setOnGround();
 			} else if (tetris.getGametick() - lasttouch > tetris.FINALSTOPTICK) {
-				stick(tetris);
+				spinCheck(tetris);
+				setOnGround();
 			}
 			stickwait++;
 		} else {
@@ -212,6 +267,11 @@ public class Tetrimino implements Cloneable {
 		tetris.hold();
 	}
 
+	/**
+	 * 指定差分動く、spined=falseかつchanged=true
+	 * @param x
+	 * @param y
+	 */
 	private void move(int x, int y) {
 		if (x == 0 && y == 0)
 			return;
@@ -221,7 +281,11 @@ public class Tetrimino implements Cloneable {
 		changed = true;
 	}
 
-	private void stick(TetrisBoard tetris) {
+	/**
+	 * isTspin isTspinMiniをセット
+	 * @param tetris
+	 */
+	private void spinCheck(TetrisBoard tetris) {
 		if (type == Mino.T && spined) {
 			int cnt = 0;
 			boolean miniable = false;
@@ -245,13 +309,23 @@ public class Tetrimino implements Cloneable {
 					isTspinMini = true;
 			}
 		}
-		onGround = true;
 	}
 
 	private void doNothing(TetrisBoard tetris) {
 
 	}
 
+	public boolean isOnGround() {
+		return onGround;
+	}
+
+	public void setOnGround() {
+		this.onGround = true;
+	}
+
+	/**
+	 * 場所、回転、形が同じなら等しい
+	 */
 	public boolean equals(Object obj) {
 		if (obj instanceof Tetrimino) {
 			Tetrimino mino = (Tetrimino) obj;
@@ -278,14 +352,17 @@ public class Tetrimino implements Cloneable {
 	private int Rt = 0;
 	private int Dt = 0;
 
-	private boolean control(TetrisBoard tetris, Control control) {
-		if (changed)
-			return false;
+	/**
+	 * ルールに則ってコントロール
+	 * @param tetris
+	 * @param control
+	 */
+	private void control(TetrisBoard tetris, Control control) {
 
 		int now = tetris.getGametick();
 		switch (control) {
 		case Drop:
-			if (now - Dt > DOWN) {
+			if (now - Dt >= DOWN) {
 				Dt = now;
 				drop(tetris);
 			}
@@ -304,7 +381,7 @@ public class Tetrimino implements Cloneable {
 				slide(tetris, false);
 				Lp = true;
 				Lt = now;
-			} else if (now - Lt > SLIDE_FIRST) {
+			} else if (now - Lt >= SLIDE_FIRST) {
 				slide(tetris, false);
 				Lt = now - (SLIDE_FIRST - SLIDE_NEXT);
 			}
@@ -317,7 +394,7 @@ public class Tetrimino implements Cloneable {
 				slide(tetris, true);
 				Rp = true;
 				Rt = now;
-			} else if (now - Rt > SLIDE_FIRST) {
+			} else if (now - Rt >= SLIDE_FIRST) {
 				slide(tetris, true);
 				Rt = now - (SLIDE_FIRST - SLIDE_NEXT);
 			}
@@ -334,16 +411,12 @@ public class Tetrimino implements Cloneable {
 			Lp = false;
 		if (control != Control.Rslide)
 			Rp = false;
-
-		if (changed)
-			return true;
-		else
-			return false;
 	}
 
 	@Override
 	protected Tetrimino clone() throws CloneNotSupportedException {
-		return (Tetrimino) super.clone();
+		Tetrimino ret = (Tetrimino) super.clone();
+		return ret;
 	}
 
 	public boolean placeTo(Mino[][] board) {
@@ -358,5 +431,9 @@ public class Tetrimino implements Cloneable {
 			}
 		}
 		return true;
+	}
+
+	public boolean isChanged() {
+		return changed;
 	}
 }

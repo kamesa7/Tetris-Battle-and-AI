@@ -5,19 +5,27 @@ import java.util.Date;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input.Keys;
+import com.badlogic.gdx.files.FileHandle;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 
 public class Tetris extends ApplicationAdapter {
+	FreeTypeFontGenerator fontGenerator;
+BitmapFont bitmapFont;
+
 	TetrisBoard tetris1;
 	TetrisBoard tetris2;
 
 	SpriteBatch batch;
 
-	int speed = 1;
+	TetrisThread thread;
 
-	Controler controler1 = new CPAI(true);
-	Controler controler2 = new CPAI(false);
+	 Controler controler1 = new Player();
+//	Controler controler1 = new CPAI(true, false);
+	Controler controler2 = new CPAI(false, true);
 
 	public final static String DATE = new Date().toString().replace(":", "");
 
@@ -27,69 +35,63 @@ public class Tetris extends ApplicationAdapter {
 
 		batch = new SpriteBatch();
 
+        FileHandle file = Gdx.files.local("font/SNslit.ttf");
+        fontGenerator = new FreeTypeFontGenerator(file);
+        FreeTypeFontGenerator.FreeTypeFontParameter param = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        param.size = 20;
+        param.color= Color.BLACK;
+        bitmapFont = fontGenerator.generateFont(param);
+
 		tetris1 = new TetrisBoard(80, 10, controler1);
 		tetris2 = new TetrisBoard(400, 10, controler2);
 
+		thread = new TetrisThread();
+//		thread.start();
 	}
 
 	@Override
 	public void render() {
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_1))
-			speed = 1;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_2))
-			speed = 5;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_3))
-			speed = 10;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_4))
-			speed = 50;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_5))
-			speed = 100;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_6))
-			speed = 500;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_7))
-			speed = 1000;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_8))
-			speed = 5000;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_9))
-			speed = 10000;
-		if (Gdx.input.isKeyJustPressed(Keys.NUM_0))
-			speed = 0;
 		if (Gdx.input.isKeyJustPressed(Keys.Q))
 			controler1 = new Player();
 		if (Gdx.input.isKeyJustPressed(Keys.W))
-			controler1 = new CPAI(true);
+			controler1 = new CPAI(true, false);
 		if (Gdx.input.isKeyJustPressed(Keys.E))
-			controler1 = new CPAI(false);
-
-		for (int i = 0; i < speed; i++) {
-			if (tetris1.enemy == null)
-				tetris1.setEnemy(tetris2);
-			if (tetris2.enemy == null)
-				tetris2.setEnemy(tetris1);
-
-			if (tetris1.isGameover()) {
-				tetris2.setGameOver(!tetris1.isWin());
-
-				tetris1 = new TetrisBoard(80, 10, controler1);
-				tetris2 = new TetrisBoard(400, 10, controler2);
-
-			} else if (tetris2.isGameover()) {
-				tetris1.setGameOver(!tetris2.isWin());
-
-				tetris1 = new TetrisBoard(80, 10, controler1);
-				tetris2 = new TetrisBoard(400, 10, controler2);
-
+			controler1 = new CPAI(false, true);
+		if (Gdx.input.isKeyJustPressed(Keys.P))
+			controler2.save();
+		if (Gdx.input.isKeyJustPressed(Keys.T)) {
+			thread.setRun(false);
+			thread.interrupt();
+			thread = new TetrisThread();
+			tetris1 = new TetrisBoard(80, 10, controler1);
+			tetris2 = new TetrisBoard(400, 10, controler2);
+		}
+		if (Gdx.input.isKeyJustPressed(Keys.SPACE)) {
+			if (thread.isAlive()) {
+				thread.setRun(false);
 			} else {
-				tetris1.tick();
-				tetris2.tick();
+				thread = new TetrisThread();
+				thread.start();
 			}
 		}
+		if(Gdx.input.isKeyJustPressed(Keys.ENTER)){
+			tetris1 = new TetrisBoard(80, 10, controler1);
+			tetris2 = new TetrisBoard(400, 10, controler2);
+		}
 
-		Gdx.gl.glClearColor(1, 1, 1, 1);
+		if (!thread.isAlive()) {
+			thread.process();
+		}
+
+		Gdx.gl.glClearColor(0.6f, 0.6f, 0.8f, 1);
 		Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 		batch.begin();
-		tetris1.draw(batch);
-		tetris2.draw(batch);
+		try {
+			tetris1.draw(batch,bitmapFont);
+			tetris2.draw(batch,bitmapFont);
+		} catch (Exception e) {
+			System.err.println("Something Drawing Error");
+		}
 		batch.end();
 	}
 
@@ -98,4 +100,44 @@ public class Tetris extends ApplicationAdapter {
 		batch.dispose();
 	}
 
+	class TetrisThread extends Thread {
+		private boolean run;
+
+		@Override
+		public void run() {
+			setRun(true);
+			while (isRun()) {
+				process();
+			}
+		}
+
+		private void process() {
+			if(tetris1.isGameover() || tetris2.isGameover())
+				return;
+
+			if (tetris1.enemy == null)
+				tetris1.setEnemy(tetris2);
+			if (tetris2.enemy == null)
+				tetris2.setEnemy(tetris1);
+
+			tetris1.tick();
+			if (tetris1.isGameover()) {
+				tetris2.setGameOver(!tetris1.isWin());
+				return;
+			}
+			tetris2.tick();
+			if (tetris2.isGameover()) {
+				tetris1.setGameOver(!tetris2.isWin());
+				return;
+			}
+		}
+
+		public boolean isRun() {
+			return run;
+		}
+
+		public void setRun(boolean run) {
+			this.run = run;
+		}
+	}
 }

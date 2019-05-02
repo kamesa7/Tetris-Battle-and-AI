@@ -18,7 +18,7 @@ public class Controler {
 	}
 
 	public void gameset(TetrisBoard tetrisBoard) {
-
+		System.out.println(tetrisBoard);
 	}
 
 	public void appyEvaluater(Evaluater evaluater) {
@@ -26,6 +26,10 @@ public class Controler {
 	}
 
 	public void init(TetrisBoard tetrisBoard) {
+		System.out.println(tetrisBoard);
+	}
+
+	public void save() {
 
 	}
 

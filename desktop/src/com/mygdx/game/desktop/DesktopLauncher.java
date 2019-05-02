@@ -7,8 +7,6 @@ import com.mygdx.game.Tetris;
 public class DesktopLauncher {
 	public static void main (String[] arg) {
 		LwjglApplicationConfiguration config = new LwjglApplicationConfiguration();
-		config.x=-1;
-		config.y=-1;
 		new LwjglApplication(new Tetris(), config);
 	}
 }
